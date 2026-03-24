@@ -62,17 +62,27 @@ func convertToInterface(params convertParams) (openbindings.Interface, error) {
 		return openbindings.Interface{}, err
 	}
 
+	return buildInterfaceFromSpec(spec, params.inputPath, fromTok.String(), toTok.Version)
+}
+
+// convertToInterfaceWithSpec builds an interface from a pre-loaded spec.
+func convertToInterfaceWithSpec(spec *usage.Spec, location string) (openbindings.Interface, error) {
+	fromTok := formattoken.FormatToken{Name: "usage", Version: usage.MaxTestedVersion}
+	return buildInterfaceFromSpec(spec, location, fromTok.String(), openbindings.MaxTestedVersion)
+}
+
+func buildInterfaceFromSpec(spec *usage.Spec, location, formatStr, obVersion string) (openbindings.Interface, error) {
 	meta := spec.Meta()
 
 	sourceEntry := openbindings.Source{
-		Format: fromTok.String(),
+		Format: formatStr,
 	}
-	if params.inputPath != "" {
-		sourceEntry.Location = params.inputPath
+	if location != "" {
+		sourceEntry.Location = location
 	}
 
 	iface := openbindings.Interface{
-		OpenBindings: toTok.Version,
+		OpenBindings: obVersion,
 		Name:         meta.Name,
 		Version:      meta.Version,
 		Description:  meta.About,

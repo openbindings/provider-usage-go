@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -17,13 +18,24 @@ import (
 
 const ResolveArtifactTimeout = 5 * time.Second
 
+type specLoader func(location string, content any) (*usage.Spec, error)
+
+func executeBindingCached(ctx context.Context, input *openbindings.BindingExecutionInput, loader specLoader) *openbindings.ExecuteOutput {
+	return executeBindingInternal(ctx, input, loader)
+}
+
 func executeBinding(ctx context.Context, input *openbindings.BindingExecutionInput) *openbindings.ExecuteOutput {
+	return executeBindingInternal(ctx, input, func(loc string, content any) (*usage.Spec, error) {
+		return loadSpec(loc, content)
+	})
+}
+
+func executeBindingInternal(ctx context.Context, input *openbindings.BindingExecutionInput, loader specLoader) *openbindings.ExecuteOutput {
 	start := time.Now()
 
 	var binName string
 	var args []string
 
-	// Check metadata for binary hint
 	binary := metadataBinary(input.Context)
 
 	if binary != "" {
@@ -34,7 +46,7 @@ func executeBinding(ctx context.Context, input *openbindings.BindingExecutionInp
 			return openbindings.FailedOutput(start, "args_build_failed", err.Error())
 		}
 	} else {
-		spec, err := loadSpec(input.Source.Location, input.Source.Content)
+		spec, err := loader(input.Source.Location, input.Source.Content)
 		if err != nil {
 			return openbindings.FailedOutput(start, "spec_load_failed", err.Error())
 		}
@@ -59,7 +71,7 @@ func executeBinding(ctx context.Context, input *openbindings.BindingExecutionInp
 		}
 	}
 
-	output, status, err := runCLI(ctx, binName, args)
+	output, status, err := runCLI(ctx, binName, args, input.Context)
 	duration := time.Since(start).Milliseconds()
 
 	if ctx.Err() != nil {
@@ -117,8 +129,16 @@ func buildDirectArgsFromRef(ref string, input any) ([]string, error) {
 		return args, nil
 	}
 
-	for name, value := range inputMap {
-		flagArgs, _ := formatFlagWithDef(name, value, usage.Flag{})
+	names := make([]string, 0, len(inputMap))
+	for name := range inputMap {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		flagArgs, err := formatFlagWithDef(name, inputMap[name], usage.Flag{})
+		if err != nil {
+			return nil, fmt.Errorf("format flag %q: %w", name, err)
+		}
 		args = append(args, flagArgs...)
 	}
 
@@ -404,8 +424,15 @@ func formatFlagWithDef(name string, value any, flagDef usage.Flag) ([]string, er
 	}
 }
 
-func runCLI(ctx context.Context, binName string, args []string) (any, int, error) {
+func runCLI(ctx context.Context, binName string, args []string, bindCtx *openbindings.BindingContext) (any, int, error) {
 	cmd := exec.CommandContext(ctx, binName, args...)
+
+	if bindCtx != nil && len(bindCtx.Environment) > 0 {
+		cmd.Env = os.Environ()
+		for k, v := range bindCtx.Environment {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -478,7 +505,12 @@ func resolveCommandArtifact(location string) (string, error) {
 
 	if err := cmd.Run(); err != nil {
 		if stderr.Len() > 0 {
-			return "", fmt.Errorf("command failed: %s", strings.TrimSpace(stderr.String()))
+			msg := strings.TrimSpace(stderr.String())
+			const maxStderr = 256
+			if len(msg) > maxStderr {
+				msg = msg[:maxStderr] + "..."
+			}
+			return "", fmt.Errorf("command failed: %s", msg)
 		}
 		return "", fmt.Errorf("command failed: %w", err)
 	}
