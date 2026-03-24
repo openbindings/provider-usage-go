@@ -26,8 +26,10 @@ func New() *Provider {
 	}
 }
 
+// cachedLoadSpec loads a usage spec, caching by location within a process.
+// When content is provided, the cache is bypassed and updated with the fresh parse.
 func (p *Provider) cachedLoadSpec(location string, content any) (*usagelib.Spec, error) {
-	if location != "" {
+	if location != "" && content == nil {
 		p.mu.RLock()
 		if spec, ok := p.specCache[location]; ok {
 			p.mu.RUnlock()
