@@ -107,6 +107,11 @@ func buildInterfaceFromSpec(spec *usage.Spec, location, formatStr, obVersion str
 			return
 		}
 		opKey := strings.Join(path, ".")
+		if override, ok := cmd.Node.Props["opKey"]; ok {
+			if s := override.String(); s != "" {
+				opKey = s
+			}
+		}
 		if _, exists := iface.Operations[opKey]; exists {
 			dupes = append(dupes, opKey)
 			return
