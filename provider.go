@@ -13,8 +13,7 @@ const FormatToken = "usage@^2.0.0"
 
 const DefaultSourceName = "usage"
 
-// Provider implements BindingExecutor, InterfaceCreator, and ContextInfoProvider
-// for usage-spec KDL.
+// Provider implements BindingExecutor and InterfaceCreator for usage-spec KDL.
 type Provider struct {
 	mu        sync.RWMutex
 	specCache map[string]*usagelib.Spec
@@ -51,50 +50,56 @@ func (p *Provider) cachedLoadSpec(location string, content any) (*usagelib.Spec,
 	return spec, nil
 }
 
-// GetContextInfo describes the context needed for a CLI binding.
-func (p *Provider) GetContextInfo(_ context.Context, source openbindings.ExecuteSource, _ string) (*openbindings.ContextInfoResult, error) {
-	spec, err := p.cachedLoadSpec(source.Location, source.Content)
-	if err != nil {
-		return nil, err
+func (p *Provider) Formats() []string {
+	return []string{FormatToken}
+}
+
+func (p *Provider) ExecuteBinding(ctx context.Context, in *openbindings.BindingExecutionInput) (*openbindings.ExecuteOutput, error) {
+	if in.Store != nil {
+		key := resolveUsageKey(in.Source.Location, in.Source.Content, p.cachedLoadSpec)
+		if key != "" {
+			if stored, err := in.Store.Get(ctx, key); err == nil && len(stored) > 0 {
+				if len(in.Context) == 0 {
+					in.Context = stored
+				} else {
+					merged := make(map[string]any, len(stored)+len(in.Context))
+					for k, v := range stored {
+						merged[k] = v
+					}
+					for k, v := range in.Context {
+						merged[k] = v
+					}
+					in.Context = merged
+				}
+			}
+		}
 	}
 
+	return executeBindingCached(ctx, in, p.cachedLoadSpec), nil
+}
+
+func resolveUsageKey(location string, content any, loader func(string, any) (*usagelib.Spec, error)) string {
+	spec, err := loader(location, content)
+	if err != nil {
+		return ""
+	}
 	meta := spec.Meta()
 	binName := meta.Bin
 	if binName == "" {
 		binName = meta.Name
 	}
 	if binName == "" {
-		if strings.HasPrefix(source.Location, "exec:") {
-			binName = strings.TrimPrefix(source.Location, "exec:")
+		if strings.HasPrefix(location, "exec:") {
+			binName = strings.TrimPrefix(location, "exec:")
 			if idx := strings.IndexByte(binName, ' '); idx > 0 {
 				binName = binName[:idx]
 			}
 		}
 	}
 	if binName == "" {
-		return nil, nil
+		return ""
 	}
-
-	key := "exec:" + binName
-
-	description := meta.Name
-	if description == "" {
-		description = binName
-	}
-
-	return &openbindings.ContextInfoResult{
-		Key:         key,
-		Required:    false,
-		Description: description,
-	}, nil
-}
-
-func (p *Provider) Formats() []string {
-	return []string{FormatToken}
-}
-
-func (p *Provider) ExecuteBinding(ctx context.Context, in *openbindings.BindingExecutionInput) (*openbindings.ExecuteOutput, error) {
-	return executeBindingCached(ctx, in, p.cachedLoadSpec), nil
+	return "exec:" + binName
 }
 
 func (p *Provider) CreateInterface(ctx context.Context, in *openbindings.CreateInput) (*openbindings.Interface, error) {
