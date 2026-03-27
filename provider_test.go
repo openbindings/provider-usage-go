@@ -9,7 +9,7 @@ import (
 	openbindings "github.com/openbindings/openbindings-go"
 )
 
-func TestGetContextSchema_WithBin(t *testing.T) {
+func TestGetContextInfo_WithBin(t *testing.T) {
 	kdl := `name "My CLI"
 bin "mycli"
 `
@@ -20,7 +20,7 @@ bin "mycli"
 	}
 
 	p := New()
-	result, err := p.GetContextSchema(context.Background(), openbindings.ExecuteSource{
+	result, err := p.GetContextInfo(context.Background(), openbindings.ExecuteSource{
 		Location: specPath,
 	}, "")
 
@@ -41,7 +41,7 @@ bin "mycli"
 	}
 }
 
-func TestGetContextSchema_FallbackToName(t *testing.T) {
+func TestGetContextInfo_FallbackToName(t *testing.T) {
 	kdl := `name "kubectl"
 `
 	dir := t.TempDir()
@@ -51,7 +51,7 @@ func TestGetContextSchema_FallbackToName(t *testing.T) {
 	}
 
 	p := New()
-	result, err := p.GetContextSchema(context.Background(), openbindings.ExecuteSource{
+	result, err := p.GetContextInfo(context.Background(), openbindings.ExecuteSource{
 		Location: specPath,
 	}, "")
 
@@ -63,7 +63,7 @@ func TestGetContextSchema_FallbackToName(t *testing.T) {
 	}
 }
 
-func TestGetContextSchema_NoBinOrName(t *testing.T) {
+func TestGetContextInfo_NoBinOrName(t *testing.T) {
 	kdl := `about "No identity"
 `
 	dir := t.TempDir()
@@ -73,7 +73,7 @@ func TestGetContextSchema_NoBinOrName(t *testing.T) {
 	}
 
 	p := New()
-	result, err := p.GetContextSchema(context.Background(), openbindings.ExecuteSource{
+	result, err := p.GetContextInfo(context.Background(), openbindings.ExecuteSource{
 		Location: specPath,
 	}, "")
 
@@ -85,12 +85,12 @@ func TestGetContextSchema_NoBinOrName(t *testing.T) {
 	}
 }
 
-func TestGetContextSchema_ContentString(t *testing.T) {
+func TestGetContextInfo_ContentString(t *testing.T) {
 	kdl := `name "docker"
 bin "docker"
 `
 	p := New()
-	result, err := p.GetContextSchema(context.Background(), openbindings.ExecuteSource{
+	result, err := p.GetContextInfo(context.Background(), openbindings.ExecuteSource{
 		Content: kdl,
 	}, "")
 

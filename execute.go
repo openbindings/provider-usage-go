@@ -36,7 +36,7 @@ func executeBindingInternal(ctx context.Context, input *openbindings.BindingExec
 	var binName string
 	var args []string
 
-	binary := metadataBinary(input.Context)
+	binary := metadataBinary(input.Options)
 
 	if binary != "" {
 		binName = binary
@@ -71,7 +71,7 @@ func executeBindingInternal(ctx context.Context, input *openbindings.BindingExec
 		}
 	}
 
-	output, status, err := runCLI(ctx, binName, args, input.Context)
+	output, status, err := runCLI(ctx, binName, args, input.Options)
 	duration := time.Since(start).Milliseconds()
 
 	if ctx.Err() != nil {
@@ -103,12 +103,12 @@ func executeBindingInternal(ctx context.Context, input *openbindings.BindingExec
 	}
 }
 
-// metadataBinary extracts the "binary" hint from binding context metadata.
-func metadataBinary(bindCtx *openbindings.BindingContext) string {
-	if bindCtx == nil || bindCtx.Metadata == nil {
+// metadataBinary extracts the "binary" hint from execution options metadata.
+func metadataBinary(opts *openbindings.ExecutionOptions) string {
+	if opts == nil || opts.Metadata == nil {
 		return ""
 	}
-	if b, ok := bindCtx.Metadata["binary"].(string); ok {
+	if b, ok := opts.Metadata["binary"].(string); ok {
 		return b
 	}
 	return ""
@@ -146,6 +146,21 @@ func buildDirectArgsFromRef(ref string, input any) ([]string, error) {
 }
 
 func loadSpec(location string, content any) (*usage.Spec, error) {
+	// Prefer inline content when provided — avoids redundant disk reads when
+	// callers (e.g. Sync) already have fresh bytes.
+	if content != nil {
+		switch c := content.(type) {
+		case string:
+			spec, err := usage.ParseKDL([]byte(c))
+			if err != nil {
+				return nil, fmt.Errorf("parse usage content: %w", err)
+			}
+			return spec, nil
+		default:
+			return nil, fmt.Errorf("unsupported content type %T (expected string)", content)
+		}
+	}
+
 	if location != "" {
 		if strings.HasPrefix(location, "exec:") {
 			resolved, err := resolveCommandArtifact(location)
@@ -164,19 +179,6 @@ func loadSpec(location string, content any) (*usage.Spec, error) {
 			return nil, fmt.Errorf("parse usage spec: %w", err)
 		}
 		return spec, nil
-	}
-
-	if content != nil {
-		switch c := content.(type) {
-		case string:
-			spec, err := usage.ParseKDL([]byte(c))
-			if err != nil {
-				return nil, fmt.Errorf("parse usage content: %w", err)
-			}
-			return spec, nil
-		default:
-			return nil, fmt.Errorf("unsupported content type %T (expected string)", content)
-		}
 	}
 
 	return nil, fmt.Errorf("source must have location or content")
@@ -424,12 +426,12 @@ func formatFlagWithDef(name string, value any, flagDef usage.Flag) ([]string, er
 	}
 }
 
-func runCLI(ctx context.Context, binName string, args []string, bindCtx *openbindings.BindingContext) (any, int, error) {
+func runCLI(ctx context.Context, binName string, args []string, opts *openbindings.ExecutionOptions) (any, int, error) {
 	cmd := exec.CommandContext(ctx, binName, args...)
 
-	if bindCtx != nil && len(bindCtx.Environment) > 0 {
+	if opts != nil && len(opts.Environment) > 0 {
 		cmd.Env = os.Environ()
-		for k, v := range bindCtx.Environment {
+		for k, v := range opts.Environment {
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}
 	}

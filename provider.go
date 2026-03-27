@@ -13,7 +13,7 @@ const FormatToken = "usage@^2.0.0"
 
 const DefaultSourceName = "usage"
 
-// Provider implements BindingExecutor, InterfaceCreator, and ContextSchemaProvider
+// Provider implements BindingExecutor, InterfaceCreator, and ContextInfoProvider
 // for usage-spec KDL.
 type Provider struct {
 	mu        sync.RWMutex
@@ -51,8 +51,8 @@ func (p *Provider) cachedLoadSpec(location string, content any) (*usagelib.Spec,
 	return spec, nil
 }
 
-// GetContextSchema describes the context needed for a CLI binding.
-func (p *Provider) GetContextSchema(_ context.Context, source openbindings.ExecuteSource, _ string) (*openbindings.ContextSchemaResult, error) {
+// GetContextInfo describes the context needed for a CLI binding.
+func (p *Provider) GetContextInfo(_ context.Context, source openbindings.ExecuteSource, _ string) (*openbindings.ContextInfoResult, error) {
 	spec, err := p.cachedLoadSpec(source.Location, source.Content)
 	if err != nil {
 		return nil, err
@@ -77,18 +77,15 @@ func (p *Provider) GetContextSchema(_ context.Context, source openbindings.Execu
 
 	key := "exec:" + binName
 
-	builder := openbindings.ContextSchema()
-
 	description := meta.Name
 	if description == "" {
 		description = binName
 	}
 
-	return &openbindings.ContextSchemaResult{
+	return &openbindings.ContextInfoResult{
 		Key:         key,
 		Required:    false,
 		Description: description,
-		Schema:      builder.Build(),
 	}, nil
 }
 
