@@ -118,7 +118,6 @@ func buildInterfaceFromSpec(spec *usage.Spec, location, formatStr, obVersion str
 		}
 
 		op := openbindings.Operation{
-			Kind:        openbindings.OperationKindMethod,
 			Description: cmd.Help,
 		}
 
